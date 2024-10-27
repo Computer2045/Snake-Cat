@@ -2,81 +2,124 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cat Chase</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Space Chase</title>
     <style>
+        /* Previous styles remain the same */
         body {
             margin: 0;
             min-height: 100vh;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #FFE5E5, #FFF0F5);
-            font-family: Arial, sans-serif;
+            background: #000;
+            font-family: 'Arial', sans-serif;
             overflow: hidden;
             touch-action: none;
         }
-        canvas {
-            background: #FFF8F8;
+        #game {
+            background: transparent;
             border-radius: 20px;
-            box-shadow: 0 0 30px rgba(255,192,203,0.5);
-        }
-        .controls {
-            position: fixed;
-            bottom: 20px;
-            display: grid;
-            grid-template-columns: repeat(3, 60px);
-            gap: 10px;
-        }
-        .btn {
-            width: 60px;
-            height: 60px;
-            border: none;
-            border-radius: 50%;
-            background: rgba(255,182,193,0.7);
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            touch-action: manipulation;
+            box-shadow: 0 0 50px rgba(88, 101, 242, 0.5);
         }
         #score {
             position: fixed;
             top: 20px;
-            font-size: 24px;
-            color: #FF69B4;
+            font-size: 28px;
+            color: #58F;
+            text-shadow: 0 0 10px #58F;
+            font-family: 'Arial', sans-serif;
+        }
+        #joystick {
+            position: fixed;
+            pointer-events: none;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: rgba(88, 136, 255, 0.1);
+            border: 2px solid rgba(88, 136, 255, 0.4);
+            display: none;
+        }
+        #stick {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: rgba(88, 136, 255, 0.4);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 20px rgba(88, 136, 255, 0.6);
         }
         .game-over {
             position: fixed;
             display: none;
-            background: rgba(255,255,255,0.9);
-            padding: 20px;
-            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 20px;
             text-align: center;
+            z-index: 100;
+            color: #58F;
+            border: 2px solid #58F;
+            box-shadow: 0 0 30px rgba(88, 136, 255, 0.5);
+        }
+        button {
+            background: #58F;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 0 0 20px rgba(88, 136, 255, 0.5);
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: #7AF;
+            box-shadow: 0 0 30px rgba(88, 136, 255, 0.8);
+            transform: scale(1.05);
         }
     </style>
 </head>
 <body>
     <div id="score">Score: 0</div>
     <canvas id="game"></canvas>
-    <div class="controls">
-        <button class="btn" id="left">←</button>
-        <button class="btn" id="up">↑</button>
-        <button class="btn" id="down">↓</button>
-        <button class="btn" id="right">→</button>
-    </div>
+    <div id="joystick"><div id="stick"></div></div>
     <div class="game-over">
-        <h2>Game Over!</h2>
-        <button onclick="startGame()">Play Again</button>
+        <h2>GAME OVER</h2>
+        <button onclick="startGame()">RESTART MISSION</button>
     </div>
     <script>
+        // Previous setup code remains the same until drawSpaceship function
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
         const scoreEl = document.getElementById('score');
         const gameOverEl = document.querySelector('.game-over');
+        const joystick = document.getElementById('joystick');
+        const stick = document.getElementById('stick');
 
         canvas.width = 1200;
         canvas.height = 800;
+
+        function resizeCanvas() {
+            const scale = Math.min(
+                window.innerWidth / canvas.width * 0.95,
+                window.innerHeight / canvas.height * 0.95
+            );
+            canvas.style.width = canvas.width * scale + 'px';
+            canvas.style.height = canvas.height * scale + 'px';
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const stars = Array(200).fill().map(() => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 2 + 1,
+            speed: Math.random() * 2 + 1
+        }));
 
         const grid = 40;
         let cat = [{x: 5, y: 5}];
@@ -84,70 +127,163 @@
         let dx = 0, dy = 0;
         let score = 0;
         let game = null;
+        let angle = 0;
+        let enginePulse = 0;
 
-        // Cat head image (pre-rendered for performance)
-        const catHead = new Image();
-        catHead.src = 'data:image/svg+xml,' + encodeURIComponent(`
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-                <circle cx="20" cy="20" r="18" fill="#FFB6C1"/>
-                <circle cx="13" cy="15" r="3" fill="black"/>
-                <circle cx="27" cy="15" r="3" fill="black"/>
-                <path d="M15 22q5 5 10 0" stroke="black" fill="none"/>
-                <path d="M5 10l8 3m22-3l-8 3" stroke="#FFB6C1" stroke-width="2"/>
-            </svg>
-        `);
+        function drawStars() {
+            ctx.fillStyle = '#FFF';
+            stars.forEach(star => {
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+                star.y += star.speed;
+                if (star.y > canvas.height) {
+                    star.y = 0;
+                    star.x = Math.random() * canvas.width;
+                }
+            });
+        }
 
-        function drawCatSegment(x, y, isHead) {
+        function drawSpaceship(x, y, isHead) {
             const centerX = x * grid + grid/2;
             const centerY = y * grid + grid/2;
             
-            ctx.fillStyle = '#FFB6C1';
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, grid/2-2, 0, Math.PI*2);
-            ctx.fill();
-
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            if (dx || dy) angle = Math.atan2(dy, dx);
+            ctx.rotate(angle);
+            
             if (isHead) {
-                ctx.drawImage(catHead, x*grid, y*grid, grid, grid);
-                // Draw whiskers
+                // Shield effect
+                const shieldGradient = ctx.createRadialGradient(0, 0, grid/3, 0, 0, grid);
+                shieldGradient.addColorStop(0, 'rgba(88, 136, 255, 0)');
+                shieldGradient.addColorStop(0.5, 'rgba(88, 136, 255, 0.1)');
+                shieldGradient.addColorStop(1, 'rgba(88, 136, 255, 0)');
+                ctx.fillStyle = shieldGradient;
+                ctx.beginPath();
+                ctx.arc(0, 0, grid, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Main body gradient
+                const bodyGradient = ctx.createLinearGradient(-grid/2, 0, grid/2, 0);
+                bodyGradient.addColorStop(0, '#4477FF');
+                bodyGradient.addColorStop(0.5, '#58F');
+                bodyGradient.addColorStop(1, '#4477FF');
+                ctx.fillStyle = bodyGradient;
+
+                // Main ship body
+                ctx.beginPath();
+                ctx.moveTo(grid/2, 0);  // Nose
+                ctx.lineTo(-grid/4, -grid/3);  // Top wing
+                ctx.lineTo(-grid/3, -grid/6);  // Top body
+                ctx.lineTo(-grid/3, grid/6);   // Bottom body
+                ctx.lineTo(-grid/4, grid/3);   // Bottom wing
+                ctx.closePath();
+                ctx.fill();
+
+                // Metallic edge effect
                 ctx.strokeStyle = '#FFF';
                 ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Cockpit
+                const cockpitGradient = ctx.createRadialGradient(grid/6, 0, 1, grid/6, 0, grid/6);
+                cockpitGradient.addColorStop(0, '#FFF');
+                cockpitGradient.addColorStop(0.4, '#58F');
+                cockpitGradient.addColorStop(1, '#112255');
+                ctx.fillStyle = cockpitGradient;
+                ctx.beginPath();
+                ctx.ellipse(grid/6, 0, grid/6, grid/8, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Engine effects
+                enginePulse = (enginePulse + 0.2) % (Math.PI * 2);
+                const engineSize = Math.sin(enginePulse) * 5 + 15;
+                
+                // Main engine
+                const engineGradient = ctx.createRadialGradient(-grid/3, 0, 0, -grid/3, 0, engineSize);
+                engineGradient.addColorStop(0, '#FFF');
+                engineGradient.addColorStop(0.4, '#F85');
+                engineGradient.addColorStop(1, 'rgba(255, 136, 85, 0)');
+                ctx.fillStyle = engineGradient;
+                ctx.beginPath();
+                ctx.arc(-grid/3, 0, engineSize, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Side engines
                 [-1, 1].forEach(dir => {
+                    const smallEngineGradient = ctx.createRadialGradient(-grid/4, dir * grid/3, 0, -grid/4, dir * grid/3, engineSize/2);
+                    smallEngineGradient.addColorStop(0, '#FFF');
+                    smallEngineGradient.addColorStop(0.4, '#F85');
+                    smallEngineGradient.addColorStop(1, 'rgba(255, 136, 85, 0)');
+                    ctx.fillStyle = smallEngineGradient;
                     ctx.beginPath();
-                    ctx.moveTo(centerX + dir*10, centerY);
-                    ctx.lineTo(centerX + dir*20, centerY-5);
-                    ctx.moveTo(centerX + dir*10, centerY);
-                    ctx.lineTo(centerX + dir*20, centerY+5);
-                    ctx.stroke();
+                    ctx.arc(-grid/4, dir * grid/3, engineSize/2, 0, Math.PI * 2);
+                    ctx.fill();
                 });
+
+                // Energy field
+                ctx.strokeStyle = `rgba(88, 136, 255, ${0.3 + Math.sin(enginePulse) * 0.2})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(0, 0, grid/2, 0, Math.PI * 2);
+                ctx.stroke();
+
+            } else {
+                // Trail particles with gradient
+                const trailGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, grid/3);
+                trailGradient.addColorStop(0, 'rgba(88, 136, 255, 0.8)');
+                trailGradient.addColorStop(0.5, 'rgba(88, 136, 255, 0.3)');
+                trailGradient.addColorStop(1, 'rgba(88, 136, 255, 0)');
+                ctx.fillStyle = trailGradient;
+                ctx.beginPath();
+                ctx.arc(0, 0, grid/3, 0, Math.PI * 2);
+                ctx.fill();
             }
+            ctx.restore();
         }
 
-        function drawFood() {
+        function drawCrystal() {
             const centerX = food.x * grid + grid/2;
             const centerY = food.y * grid + grid/2;
             
-            // Draw fish
-            ctx.fillStyle = '#4169E1';
-            ctx.beginPath();
-            ctx.ellipse(centerX, centerY, grid/3, grid/4, Math.PI/4, 0, Math.PI*2);
-            ctx.fill();
+            // Crystal animation
+            const pulseSize = Math.sin(Date.now() / 200) * 5;
             
-            // Tail
+            ctx.fillStyle = '#F5F';
+            ctx.strokeStyle = '#FFF';
+            ctx.lineWidth = 2;
+            
+            // Outer glow
+            ctx.shadowColor = '#F5F';
+            ctx.shadowBlur = 15 + pulseSize;
+            
+            // Crystal shape
             ctx.beginPath();
-            ctx.moveTo(centerX-grid/4, centerY-grid/4);
-            ctx.lineTo(centerX-grid/2, centerY-grid/2);
-            ctx.lineTo(centerX-grid/4, centerY-grid/3);
+            ctx.moveTo(centerX, centerY - grid/3 - pulseSize);
+            ctx.lineTo(centerX + grid/3 + pulseSize, centerY);
+            ctx.lineTo(centerX, centerY + grid/3 + pulseSize);
+            ctx.lineTo(centerX - grid/3 - pulseSize, centerY);
+            ctx.closePath();
             ctx.fill();
+            ctx.stroke();
+            
+            // Inner glow
+            ctx.shadowBlur = 5;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
         }
 
+        // Rest of the game logic remains the same
         function gameLoop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Move cat
+            drawStars();
+            
             const head = {x: cat[0].x + dx, y: cat[0].y + dy};
             cat.unshift(head);
             
-            // Check food collision
             if (head.x === food.x && head.y === food.y) {
                 score += 10;
                 scoreEl.textContent = `Score: ${score}`;
@@ -159,14 +295,12 @@
                 cat.pop();
             }
             
-            // Check wall collision
             if (head.x < 0 || head.x >= canvas.width/grid || 
                 head.y < 0 || head.y >= canvas.height/grid) {
                 gameOver();
                 return;
             }
             
-            // Check self collision
             for (let i = 1; i < cat.length; i++) {
                 if (head.x === cat[i].x && head.y === cat[i].y) {
                     gameOver();
@@ -174,14 +308,15 @@
                 }
             }
             
-            // Draw cat and food
-            cat.forEach((segment, i) => drawCatSegment(segment.x, segment.y, i === 0));
-            drawFood();
+            cat.forEach((segment, i) => drawSpaceship(segment.x, segment.y, i === 0));
+            drawCrystal();
         }
 
         function gameOver() {
             clearInterval(game);
             gameOverEl.style.display = 'block';
+            joystick.style.display = 'none';
+            joystickActive = false;
         }
 
         function startGame() {
@@ -194,22 +329,60 @@
             game = setInterval(gameLoop, 100);
         }
 
-        // Controls
-        const controls = {
-            'ArrowUp': () => {if(dy !== 1) {dx=0; dy=-1}},
-            'ArrowDown': () => {if(dy !== -1) {dx=0; dy=1}},
-            'ArrowLeft': () => {if(dx !== 1) {dx=-1; dy=0}},
-            'ArrowRight': () => {if(dx !== -1) {dx=1; dy=0}}
-        };
+        // Control event listeners remain the same
+        let joystickActive = false;
+        let joystickCenter = {x: 0, y: 0};
+        let touchPos = {x: 0, y: 0};
 
-        document.addEventListener('keydown', e => controls[e.key]?.());
-        
-        // Touch controls
-        ['up','down','left','right'].forEach(dir => {
-            document.getElementById(dir).addEventListener('touchstart', e => {
-                e.preventDefault();
-                controls[`Arrow${dir.charAt(0).toUpperCase()+dir.slice(1)}`]();
-            });
+        document.addEventListener('touchstart', e => {
+            const touch = e.touches[0];
+            joystickActive = true;
+            joystickCenter = {x: touch.clientX, y: touch.clientY};
+            touchPos = {x: touch.clientX, y: touch.clientY};
+            
+            joystick.style.display = 'block';
+            joystick.style.left = (joystickCenter.x - 60) + 'px';
+            joystick.style.top = (joystickCenter.y - 60) + 'px';
+        });
+
+        document.addEventListener('touchmove', e => {
+            if (!joystickActive) return;
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            touchPos = {x: touch.clientX, y: touch.clientY};
+            
+            const deltaX = touchPos.x - joystickCenter.x;
+            const deltaY = touchPos.y - joystickCenter.y;
+            const distance = Math.min(50, Math.sqrt(deltaX * deltaX + deltaY * deltaY));
+            const angle = Math.atan2(deltaY, deltaX);
+            
+            stick.style.left = (50 + Math.cos(angle) * distance) + 'px';
+            stick.style.top = (50 + Math.sin(angle) * distance) + 'px';
+            
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                dx = deltaX > 0 ? 1 : -1;
+                dy = 0;
+            } else {
+                dx = 0;
+                dy = deltaY > 0 ? 1 : -1;
+            }
+        });
+
+        document.addEventListener('touchend', () => {
+            joystickActive = false;
+            joystick.style.display = 'none';
+            stick.style.left = '50%';
+            stick.style.top = '50%';
+        });
+
+        document.addEventListener('keydown', e => {
+            switch(e.key) {
+                case 'ArrowUp': if(dy !== 1) {dx=0; dy=-1}; break;
+                case 'ArrowDown': if(dy !== -1) {dx=0; dy=1}; break;
+                case 'ArrowLeft': if(dx !== 1) {dx=-1; dy=0}; break;
+                case 'ArrowRight': if(dx !== -1) {dx=1; dy=0}; break;
+            }
         });
 
         startGame();
