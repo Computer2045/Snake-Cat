@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat Chase</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #FFE5E5, #FFF0F5);
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            background: #FFF8F8;
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(255,192,203,0.5);
+        }
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            gap: 10px;
+        }
+        .btn {
+            width: 60px;
+            height: 60px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255,182,193,0.7);
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        #score {
+            position: fixed;
+            top: 20px;
+            font-size: 24px;
+            color: #FF69B4;
+        }
+        .game-over {
+            position: fixed;
+            display: none;
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">Score: 0</div>
+    <canvas id="game"></canvas>
+    <div class="controls">
+        <button class="btn" id="left">←</button>
+        <button class="btn" id="up">↑</button>
+        <button class="btn" id="down">↓</button>
+        <button class="btn" id="right">→</button>
+    </div>
+    <div class="game-over">
+        <h2>Game Over!</h2>
+        <button onclick="startGame()">Play Again</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const gameOverEl = document.querySelector('.game-over');
+
+        canvas.width = 1200;
+        canvas.height = 800;
+
+        const grid = 40;
+        let cat = [{x: 5, y: 5}];
+        let food = {x: 10, y: 10};
+        let dx = 0, dy = 0;
+        let score = 0;
+        let game = null;
+
+        // Cat head image (pre-rendered for performance)
+        const catHead = new Image();
+        catHead.src = 'data:image/svg+xml,' + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+                <circle cx="20" cy="20" r="18" fill="#FFB6C1"/>
+                <circle cx="13" cy="15" r="3" fill="black"/>
+                <circle cx="27" cy="15" r="3" fill="black"/>
+                <path d="M15 22q5 5 10 0" stroke="black" fill="none"/>
+                <path d="M5 10l8 3m22-3l-8 3" stroke="#FFB6C1" stroke-width="2"/>
+            </svg>
+        `);
+
+        function drawCatSegment(x, y, isHead) {
+            const centerX = x * grid + grid/2;
+            const centerY = y * grid + grid/2;
+            
+            ctx.fillStyle = '#FFB6C1';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, grid/2-2, 0, Math.PI*2);
+            ctx.fill();
+
+            if (isHead) {
+                ctx.drawImage(catHead, x*grid, y*grid, grid, grid);
+                // Draw whiskers
+                ctx.strokeStyle = '#FFF';
+                ctx.lineWidth = 2;
+                [-1, 1].forEach(dir => {
+                    ctx.beginPath();
+                    ctx.moveTo(centerX + dir*10, centerY);
+                    ctx.lineTo(centerX + dir*20, centerY-5);
+                    ctx.moveTo(centerX + dir*10, centerY);
+                    ctx.lineTo(centerX + dir*20, centerY+5);
+                    ctx.stroke();
+                });
+            }
+        }
+
+        function drawFood() {
+            const centerX = food.x * grid + grid/2;
+            const centerY = food.y * grid + grid/2;
+            
+            // Draw fish
+            ctx.fillStyle = '#4169E1';
+            ctx.beginPath();
+            ctx.ellipse(centerX, centerY, grid/3, grid/4, Math.PI/4, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Tail
+            ctx.beginPath();
+            ctx.moveTo(centerX-grid/4, centerY-grid/4);
+            ctx.lineTo(centerX-grid/2, centerY-grid/2);
+            ctx.lineTo(centerX-grid/4, centerY-grid/3);
+            ctx.fill();
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Move cat
+            const head = {x: cat[0].x + dx, y: cat[0].y + dy};
+            cat.unshift(head);
+            
+            // Check food collision
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                scoreEl.textContent = `Score: ${score}`;
+                food = {
+                    x: Math.floor(Math.random() * (canvas.width/grid)),
+                    y: Math.floor(Math.random() * (canvas.height/grid))
+                };
+            } else {
+                cat.pop();
+            }
+            
+            // Check wall collision
+            if (head.x < 0 || head.x >= canvas.width/grid || 
+                head.y < 0 || head.y >= canvas.height/grid) {
+                gameOver();
+                return;
+            }
+            
+            // Check self collision
+            for (let i = 1; i < cat.length; i++) {
+                if (head.x === cat[i].x && head.y === cat[i].y) {
+                    gameOver();
+                    return;
+                }
+            }
+            
+            // Draw cat and food
+            cat.forEach((segment, i) => drawCatSegment(segment.x, segment.y, i === 0));
+            drawFood();
+        }
+
+        function gameOver() {
+            clearInterval(game);
+            gameOverEl.style.display = 'block';
+        }
+
+        function startGame() {
+            cat = [{x: 5, y: 5}];
+            dx = dy = 0;
+            score = 0;
+            scoreEl.textContent = 'Score: 0';
+            gameOverEl.style.display = 'none';
+            if (game) clearInterval(game);
+            game = setInterval(gameLoop, 100);
+        }
+
+        // Controls
+        const controls = {
+            'ArrowUp': () => {if(dy !== 1) {dx=0; dy=-1}},
+            'ArrowDown': () => {if(dy !== -1) {dx=0; dy=1}},
+            'ArrowLeft': () => {if(dx !== 1) {dx=-1; dy=0}},
+            'ArrowRight': () => {if(dx !== -1) {dx=1; dy=0}}
+        };
+
+        document.addEventListener('keydown', e => controls[e.key]?.());
+        
+        // Touch controls
+        ['up','down','left','right'].forEach(dir => {
+            document.getElementById(dir).addEventListener('touchstart', e => {
+                e.preventDefault();
+                controls[`Arrow${dir.charAt(0).toUpperCase()+dir.slice(1)}`]();
+            });
+        });
+
+        startGame();
+    </script>
+</body>
+</html>
